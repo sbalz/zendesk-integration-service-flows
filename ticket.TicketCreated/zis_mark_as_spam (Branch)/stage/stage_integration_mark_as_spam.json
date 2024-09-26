@@ -1,0 +1,174 @@
+{
+    "zis_template_version": "2019-10-14",
+    "name": "integration_a_mark_as_spam_stage",
+    "description": "Mark tickets of specific users, identified by email domain, as spam.",
+    "resources": {
+        "JobSpec": {
+            "type": "ZIS::JobSpec",
+            "properties": {
+                "name": "MarkAsSpamJobSpec",
+                "event_source": "support",
+                "event_type": "ticket.TicketCreated",
+                "flow_name": "zis:{{zis_mark_as_spam}}:flow:MarkAsSpamFlow"
+            }
+        },
+        "Flow": {
+            "type": "ZIS::Flow",
+            "properties": {
+                "name": "MarkAsSpamFlow",
+                "definition": {
+                    "StartAt": "wait.five_seconds",
+                    "States": {
+                        "wait.five_seconds": {
+                            "Type": "Wait",
+                            "Seconds": 5,
+                            "Next": "action.show_user"
+                        },
+                        "action.show_user": {
+                            "Type": "Action",
+                            "ActionName": "zis:{{zis_mark_as_spam}}:action:show_user",
+                            "Comment": "Get requester.",
+                            "Parameters": {
+                                "requester_id.$": "$.input.ticket_event.ticket.requester_id"
+                            },
+                            "ResultPath": "$.fetched_requester",
+                            "Next": "transform.check_requester_email"
+                        },
+                        "transform.check_requester_email": {
+                            "Type": "Action",
+                            "ActionName": "zis:common:transform:Jq",
+                            "Comment": "Check if the requester's email contains a domain defined as spam.",
+                            "Parameters": {
+                                "expr": "[.user.email | contains(\"@qq.com\", \"@bccto.cc\")]  | unique | if index(true)>-1 then true else false end",
+                                "data.$": "$.fetched_requester"
+                            },
+                            "ResultPath": "$.SpamRequesterMailPresent",
+                            "Next": "choice.check_requester_email_result"
+                        },
+                        "choice.check_requester_email_result": {
+                            "Type": "Choice",
+                            "Comment": "Decision to start or end the flow.",
+                            "Choices": [
+                                {
+                                    "Variable": "$.SpamRequesterMailPresent",
+                                    "BooleanEquals": true,
+                                    "Next": "action.mark_as_spam"
+                                }
+                            ],
+                            "Default": "succeed.not_spam"
+                        },
+                        "action.mark_as_spam": {
+                            "Type": "Action",
+                            "ActionName": "zis:{{zis_mark_as_spam}}:action:mark_as_spam",
+                            "Comment": "Mark ticket as spam and suspend requester.",
+                            "Parameters": {
+                                "ticket_id.$": "$.input.ticket_event.ticket.id"
+                            },
+                            "Next": "wait.ten_seconds"
+                        },
+                        "wait.ten_seconds": {
+                            "Type": "Wait",
+                            "Seconds": 10,
+                            "Next": "action.delete_user"
+                        },
+                        "action.delete_user": {
+                            "Type": "Action",
+                            "ActionName": "zis:{{zis_mark_as_spam}}:action:delete_user",
+                            "Comment": "Delete requester.",
+                            "Parameters": {
+                                "requester_id.$": "$.input.ticket_event.ticket.requester_id"
+                            },
+                            "Next": "wait.twenty_seconds"
+                        },
+                        "wait.twenty_seconds": {
+                            "Type": "Wait",
+                            "Seconds": 20,
+                            "Next": "action.permanent_delete_user"
+                        },
+                        "action.permanent_delete_user": {
+                            "Type": "Action",
+                            "ActionName": "zis:{{zis_mark_as_spam}}:action:permanent_delete_user",
+                            "Comment": "Permanent delete requester.",
+                            "Parameters": {
+                                "requester_id.$": "$.input.ticket_event.ticket.requester_id"
+                            },
+                            "Next": "action.post_webhook_full_data"
+                        },
+                        "action.post_webhook_full_data": {
+                            "Type": "Action",
+                            "ActionName": "zis:{{zis_mark_as_spam}}:action:post_webhook",
+                            "Comment": "Send full ZIS payload to the webhook for analysis/debugging.",
+                            "Parameters": {
+                                "payload.$": "$"
+                            },
+                            "End": true
+                        },
+                        "succeed.not_spam": {
+                            "Type": "Succeed",
+                            "Comment": "Logging Message",
+                            "Message": "Requester's email domain was not defined as spam."
+                        }
+                    }
+                }
+            }
+        },
+        "show_user": {
+            "type": "ZIS::Action::Http",
+            "properties": {
+                "name": "show_user",
+                "definition": {
+                    "method": "GET",
+                    "path": "/api/v2/users/{{$.requester_id}}.json",
+                    "connectionName": "zendesk"
+                }
+            }
+        },
+        "mark_as_spam": {
+            "type": "ZIS::Action::Http",
+            "properties": {
+                "name": "mark_as_spam",
+                "definition": {
+                    "method": "PUT",
+                    "path": "/api/v2/tickets/{{$.ticket_id}}/mark_as_spam",
+                    "requestBody": {},
+                    "connectionName": "zendesk"
+                }
+            }
+        },
+        "delete_user": {
+            "type": "ZIS::Action::Http",
+            "properties": {
+                "name": "delete_user",
+                "definition": {
+                    "method": "DELETE",
+                    "path": "/api/v2/users/{{$.requester_id}}",
+                    "requestBody": {},
+                    "connectionName": "zendesk"
+                }
+            }
+        },
+        "permanent_delete_user": {
+            "type": "ZIS::Action::Http",
+            "properties": {
+                "name": "permanent_delete_user",
+                "definition": {
+                    "method": "DELETE",
+                    "path": "/api/v2/deleted_users/{{$.requester_id}}",
+                    "requestBody": {},
+                    "connectionName": "zendesk"
+                }
+            }
+        },
+        "post_webhook": {
+            "type": "ZIS::Action::Http",
+            "properties": {
+                "name": "post_webhook",
+                "definition": {
+                    "method": "POST",
+                    "url": "{{https_endpoint_zis_testing}}",
+                    "requestBody": "$.payload"
+                }
+            }
+        }
+    }
+}

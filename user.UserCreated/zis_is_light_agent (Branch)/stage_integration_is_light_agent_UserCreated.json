@@ -1,0 +1,151 @@
+{
+    "zis_template_version": "2019-10-14",
+    "name": "integration_b_is_light_agent_created_stage",
+    "description": "Check 'is_light_agent' checkbox in user profile when an agent is created and the custom role is 'Light Agent'.",
+    "resources": {
+        "JobSpec": {
+            "type": "ZIS::JobSpec",
+            "properties": {
+                "name": "IsLightAgentCreatedJobSpec",
+                "event_source": "support",
+                "event_type": "user.UserCreated",
+                "flow_name": "zis:{{zis_user_created}}:flow:IsLightAgentCreated"
+            }
+        },
+        "Flow": {
+            "type": "ZIS::Flow",
+            "properties": {
+                "name": "IsLightAgentCreated",
+                "definition": {
+                    "StartAt": "transform.filter_role",
+                    "States": {
+                        "transform.filter_role": {
+                            "Type": "Action",
+                            "ActionName": "zis:common:transform:Jq",
+                            "Comment": "Check if role is agent.",
+                            "Parameters": {
+                                "expr": ".input.user_event.user.role == \"agent\"",
+                                "data.$": "$"
+                            },
+                            "ResultPath": "$.RoleIsAgent",
+                            "Next": "choice.check_role"
+                        },
+                        "choice.check_role": {
+                            "Type": "Choice",
+                            "Comment": "Decision to continue or end the flow.",
+                            "Choices": [
+                                {
+                                    "Variable": "$.RoleIsAgent",
+                                    "BooleanEquals": true,
+                                    "Next": "action.show_user"
+                                }
+                            ],
+                            "Default": "succeed.not_agent"
+                        },
+                        "action.show_user": {
+                            "Type": "Action",
+                            "ActionName": "zis:{{zis_user_created}}:action:show_user",
+                            "Comment": "Get requester data",
+                            "Parameters": {
+                                "user_id.$": "$.input.user_event.user.id"
+                            },
+                            "ResultPath": "$.fetched_requester",
+                            "Next": "transform.filter_custom_role"
+                        },
+                        "transform.filter_custom_role": {
+                            "Type": "Action",
+                            "ActionName": "zis:common:transform:Jq",
+                            "Comment": "Check if custom role has been changed to light agent.",
+                            "Parameters": {
+                                "expr": ".user.custom_role_id == {{light_agent_role_id}}",
+                                "data.$": "$.fetched_requester"
+                            },
+                            "ResultPath": "$.CustomRoleIsLightAgent",
+                            "Next": "choice.check_custom_role"
+                        },
+                        "choice.check_custom_role": {
+                            "Type": "Choice",
+                            "Comment": "Decision to continue or end the flow.",
+                            "Choices": [
+                                {
+                                    "Variable": "$.CustomRoleIsLightAgent",
+                                    "BooleanEquals": true,
+                                    "Next": "action.update_user_check"
+                                }
+                            ],
+                            "Default": "succeed.not_light_agent"
+                        },
+                        "action.update_user_check": {
+                            "Type": "Action",
+                            "ActionName": "zis:{{zis_user_created}}:action:update_user_check",
+                            "Comment": "Check 'is_light_agent' in User Profile.",
+                            "Parameters": {
+                                "user_id.$": "$.input.user_event.user.id"
+                            },
+                            "Next": "action.post_webhook_full_data"
+                        },
+                        "action.post_webhook_full_data": {
+                            "Type": "Action",
+                            "ActionName": "zis:{{zis_user_created}}:action:post_webhook",
+                            "Comment": "Send full ZIS payload to the webhook for analysis/debugging.",
+                            "Parameters": {
+                                "payload.$": "$"
+                            },
+                            "End": true
+                        },
+                        "succeed.not_agent": {
+                            "Type": "Succeed",
+                            "Comment": "Logging Message",
+                            "Message": "User is not an agent."
+                        },
+                        "succeed.not_light_agent": {
+                            "Type": "Succeed",
+                            "Comment": "Logging Message",
+                            "Message": "User is not a light agent."
+                        }
+                    }
+                }
+            }
+        },
+        "show_user": {
+            "type": "ZIS::Action::Http",
+            "properties": {
+                "name": "show_user",
+                "definition": {
+                    "method": "GET",
+                    "path": "/api/v2/users/{{$.user_id}}.json",
+                    "connectionName": "zendesk"
+                }
+            }
+        },
+        "update_user_check": {
+            "type": "ZIS::Action::Http",
+            "properties": {
+                "name": "update_user_check",
+                "definition": {
+                    "method": "PUT",
+                    "path": "/api/v2/users/{{$.user_id}}",
+                    "requestBody": {
+                        "user": {
+                            "user_fields": {
+                                "is_light_agent": true
+                            }
+                        }
+                    },
+                    "connectionName": "zendesk"
+                }
+            }
+        },
+        "post_webhook": {
+            "type": "ZIS::Action::Http",
+            "properties": {
+                "name": "post_webhook",
+                "definition": {
+                    "method": "POST",
+                    "url": "{{https_endpoint_zis_testing}}",
+                    "requestBody": "$.payload"
+                }
+            }
+        }
+    }
+}

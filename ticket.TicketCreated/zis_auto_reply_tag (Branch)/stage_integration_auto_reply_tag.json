@@ -1,0 +1,105 @@
+{
+    "zis_template_version": "2019-10-14",
+    "name": "integration_c_auto_reply_tag_stage",
+    "description": "Set a tag to generate an auto-reply via public comment in inbound tickets when an end user creates a ticket.",
+    "resources": {
+        "JobSpec": {
+            "type": "ZIS::JobSpec",
+            "properties": {
+                "name": "AutoReplyTagJobSpec",
+                "event_source": "support",
+                "event_type": "ticket.TicketCreated",
+                "flow_name": "zis:{{zis_auto_reply_tag}}:flow:AutoReplyTagFlow"
+            }
+        },
+        "Flow": {
+            "type": "ZIS::Flow",
+            "properties": {
+                "name": "AutoReplyTagFlow",
+                "definition": {
+                    "StartAt": "transform.check_channel_tags",
+                    "States": {
+                        "transform.check_channel_tags": {
+                            "Type": "Action",
+                            "ActionName": "zis:common:transform:Jq",
+                            "Comment": "Check if tags contain a valid channel tag",
+                            "Parameters": {
+                                "expr": ".input.ticket_event.ticket.tags | any(index(\"tkt_ch_kununu_ag_comment_function_api\", \"tkt_ch_kununu_ag_comment_function_api\"))",
+                                "data.$": "$"
+                            },
+                            "ResultPath": "$.DelayTagPresent",
+                            "Next": "choice.check_channel_tags_result"
+                        },
+                        "choice.check_channel_tags_result": {
+                            "Type": "Choice",
+                            "Comment": "Decision to start or end the flow.",
+                            "Choices": [
+                                {
+                                    "Variable": "$.DelayTagPresent",
+                                    "BooleanEquals": true,
+                                    "Next": "wait.twentyfour_seconds"
+                                }
+                            ],
+                            "Default": "succeed.tag_not_present"
+                        },
+                        "wait.twentyfour_seconds": {
+                            "Type": "Wait",
+                            "Seconds": 24,
+                            "Next": "action.add_tags_auto_reply"
+                        },
+                        "action.add_tags_auto_reply": {
+                            "Type": "Action",
+                            "ActionName": "zis:{{zis_auto_reply_tag}}:action:add_tags_auto_reply",
+                            "Comment": "Add Tag 'tkt_nt_zis_auto_reply_tag'",
+                            "Parameters": {
+                                "ticket_id.$": "$.input.ticket_event.ticket.id"
+                            },
+                            "Next": "action.post_webhook_full_data"
+                        },
+                        "action.post_webhook_full_data": {
+                            "Type": "Action",
+                            "ActionName": "zis:{{zis_mark_as_spam}}:action:post_webhook",
+                            "Comment": "Send full ZIS payload to the webhook for analysis/debugging.",
+                            "Parameters": {
+                                "payload.$": "$"
+                            },
+                            "End": true
+                        },
+                        "succeed.tag_not_present": {
+                            "Type": "Succeed",
+                            "Comment": "Logging",
+                            "Message": "Tag: valid channel tag not present"
+                        }
+                    }
+                }
+            }
+        },
+        "add_tags_auto_reply": {
+            "type": "ZIS::Action::Http",
+            "properties": {
+                "name": "add_tags_auto_reply",
+                "definition": {
+                    "method": "PUT",
+                    "path": "/api/v2/tickets/{{$.ticket_id}}/tags",
+                    "requestBody": {
+                        "tags": [
+                            "tkt_nt_zis_auto_reply_tag"
+                        ]
+                    },
+                    "connectionName": "zendesk"
+                }
+            }
+        },
+        "post_webhook": {
+            "type": "ZIS::Action::Http",
+            "properties": {
+                "name": "post_webhook",
+                "definition": {
+                    "method": "POST",
+                    "url": "{{https_endpoint_zis_testing}}",
+                    "requestBody": "$.payload"
+                }
+            }
+        }
+    }
+}

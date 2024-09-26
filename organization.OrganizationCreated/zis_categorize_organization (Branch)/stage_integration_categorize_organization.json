@@ -1,0 +1,140 @@
+{
+    "zis_template_version": "2019-10-14",
+    "name": "integration_a_categorize_organization_stage",
+    "description": "Categorization of the account type for organizations when they are created.",
+    "resources": {
+        "JobSpec": {
+            "type": "ZIS::JobSpec",
+            "properties": {
+                "name": "CategorizeOrganizationJobSpec",
+                "event_source": "support",
+                "event_type": "organization.OrganizationCreated",
+                "flow_name": "zis:{{organization_created}}:flow:CategorizeOrganizationFlow"
+            }
+        },
+        "Flow": {
+            "type": "ZIS::Flow",
+            "properties": {
+                "name": "CategorizeOrganizationFlow",
+                "definition": {
+                    "StartAt": "wait.five_seconds",
+                    "States": {
+                        "wait.five_seconds": {
+                            "Type": "Wait",
+                            "Seconds": 5,
+                            "Next": "action.show_organization"
+                        },
+                        "action.show_organization": {
+                            "Type": "Action",
+                            "ActionName": "zis:{{organization_created}}:action:show_organization",
+                            "Comment": "Get requester.",
+                            "Parameters": {
+                                "organization_id.$": "$.input.organization_event.organization.id"
+                            },
+                            "ResultPath": "$.fetched_organization",
+                            "Next": "transform.check_account_type"
+                        },
+                        "transform.check_account_type": {
+                            "Type": "Action",
+                            "ActionName": "zis:common:transform:Jq",
+                            "Comment": "Check if an account type of organization exists.",
+                            "Parameters": {
+                                "expr": ".organization.organization_fields.account_type | if . != null and . != \"\" then true else false end",
+                                "data.$": "$.fetched_organization"
+                            },
+                            "ResultPath": "$.AccountTypePresent",
+                            "Next": "choice.check_account_type_result"
+                        },
+                        "choice.check_account_type_result": {
+                            "Type": "Choice",
+                            "Comment": "Decision to start or end the flow.",
+                            "Choices": [
+                                {
+                                    "Variable": "$.AccountTypePresent",
+                                    "BooleanEquals": true,
+                                    "Next": "transform.extract_account_type_value"
+                                }
+                            ],
+                            "Default": "succeed.account_type_missing"
+                        },
+                        "transform.extract_account_type_value": {
+                            "Type": "Action",
+                            "ActionName": "zis:common:transform:Jq",
+                            "Comment": "Extract value of the organization's account type.",
+                            "Parameters": {
+                                "expr": ".organization.organization_fields.account_type | sub(\" |-\"; \"_\") | ascii_downcase",
+                                "data.$": "$.fetched_organization"
+                            },
+                            "ResultPath": "$.AccountTypeValue",
+                            "Next": "action.categorize_organization"
+                        },
+                        "action.categorize_organization": {
+                            "Type": "Action",
+                            "ActionName": "zis:{{organization_created}}:action:categorize_organization",
+                            "Comment": "Set organization class.",
+                            "Parameters": {
+                                "organization_id.$": "$.input.organization_event.organization.id",
+                                "AccountTypeValue.$": "$.AccountTypeValue"
+                            },
+                            "Next": "action.post_webhook_full_data"
+                        },
+                        "action.post_webhook_full_data": {
+                            "Type": "Action",
+                            "ActionName": "zis:{{organization_created}}:action:post_webhook",
+                            "Comment": "Send full ZIS payload to the webhook for analysis/debugging.",
+                            "Parameters": {
+                                "payload.$": "$"
+                            },
+                            "End": true
+                        },
+                        "succeed.account_type_missing": {
+                            "Type": "Succeed",
+                            "Comment": "Logging Message",
+                            "Message": "The created organization has no account type, therefore this could not be synchronized."
+                        }
+                    }
+                }
+            }
+        },
+        "show_organization": {
+            "type": "ZIS::Action::Http",
+            "properties": {
+                "name": "show_organization",
+                "definition": {
+                    "method": "GET",
+                    "path": "/api/v2/organizations/{{$.organization_id}}.json",
+                    "connectionName": "zendesk"
+                }
+            }
+        },
+        "categorize_organization": {
+            "type": "ZIS::Action::Http",
+            "properties": {
+                "name": "categorize_organization",
+                "definition": {
+                    "method": "PUT",
+                    "path": "/api/v2/organizations/{{$.organization_id}}",
+                    "requestBody": {
+                        "organization": {
+                            "organization_fields": {
+                                "organization_class": "org_account_type_{{$.AccountTypeValue}}"
+                            }
+                        }
+                    },
+                    "connectionName": "zendesk"
+                }
+            }
+        },
+        "post_webhook": {
+            "type": "ZIS::Action::Http",
+            "properties": {
+                "name": "post_webhook",
+                "definition": {
+                    "method": "POST",
+                    "url": "{{https_endpoint_zis_testing}}",
+                    "requestBody": "$.payload"
+                }
+            }
+        }
+    }
+}

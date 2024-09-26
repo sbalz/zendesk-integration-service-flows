@@ -1,0 +1,105 @@
+{
+    "zis_template_version": "2019-10-14",
+    "name": "integration_b_webhook_delay_tag_stage",
+    "description": "Set a tag for delaying the webhook update of tickets when an end user creates a ticket.",
+    "resources": {
+        "JobSpec": {
+            "type": "ZIS::JobSpec",
+            "properties": {
+                "name": "WebhookDelayTagJobSpec",
+                "event_source": "support",
+                "event_type": "ticket.TicketCreated",
+                "flow_name": "zis:{{zis_webhook_delay_tag}}:flow:WebhookDelayTagFlow"
+            }
+        },
+        "Flow": {
+            "type": "ZIS::Flow",
+            "properties": {
+                "name": "WebhookDelayTagFlow",
+                "definition": {
+                    "StartAt": "transform.check_ticket_tags",
+                    "States": {
+                        "transform.check_ticket_tags": {
+                            "Type": "Action",
+                            "ActionName": "zis:common:transform:Jq",
+                            "Comment": "Check if tags contains 'zis_webhook_delay_selection'",
+                            "Parameters": {
+                                "expr": "[.input.ticket_event.ticket.tags[] == \"zis_webhook_delay_selection\"] | unique | if index(true)>-1 then true else false end",
+                                "data.$": "$"
+                            },
+                            "ResultPath": "$.DelayTagPresent",
+                            "Next": "choice.check_ticket_tags_result"
+                        },
+                        "choice.check_ticket_tags_result": {
+                            "Type": "Choice",
+                            "Comment": "Decision to start or end the flow.",
+                            "Choices": [
+                                {
+                                    "Variable": "$.DelayTagPresent",
+                                    "BooleanEquals": true,
+                                    "Next": "wait.twelve_seconds"
+                                }
+                            ],
+                            "Default": "succeed.tag_not_present"
+                        },
+                        "wait.twelve_seconds": {
+                            "Type": "Wait",
+                            "Seconds": 12,
+                            "Next": "action.add_tags_webhook_delay"
+                        },
+                        "action.add_tags_webhook_delay": {
+                            "Type": "Action",
+                            "ActionName": "zis:{{zis_webhook_delay_tag}}:action:add_tags_webhook_delay",
+                            "Comment": "Add Tag 'tkt_nt_zis_webhook_delay_tag'",
+                            "Parameters": {
+                                "ticket_id.$": "$.input.ticket_event.ticket.id"
+                            },
+                            "Next": "action.post_webhook_full_data"
+                        },
+                        "action.post_webhook_full_data": {
+                            "Type": "Action",
+                            "ActionName": "zis:{{zis_mark_as_spam}}:action:post_webhook",
+                            "Comment": "Send full ZIS payload to the webhook for analysis/debugging.",
+                            "Parameters": {
+                                "payload.$": "$"
+                            },
+                            "End": true
+                        },
+                        "succeed.tag_not_present": {
+                            "Type": "Succeed",
+                            "Comment": "Logging",
+                            "Message": "Tag: 'zis_webhook_delay_selection' not present"
+                        }
+                    }
+                }
+            }
+        },
+        "add_tags_webhook_delay": {
+            "type": "ZIS::Action::Http",
+            "properties": {
+                "name": "add_tags_webhook_delay",
+                "definition": {
+                    "method": "PUT",
+                    "path": "/api/v2/tickets/{{$.ticket_id}}/tags",
+                    "requestBody": {
+                        "tags": [
+                            "tkt_nt_zis_webhook_delay_tag"
+                        ]
+                    },
+                    "connectionName": "zendesk"
+                }
+            }
+        },
+        "post_webhook": {
+            "type": "ZIS::Action::Http",
+            "properties": {
+                "name": "post_webhook",
+                "definition": {
+                    "method": "POST",
+                    "url": "{{https_endpoint_zis_testing}}",
+                    "requestBody": "$.payload"
+                }
+            }
+        }
+    }
+}

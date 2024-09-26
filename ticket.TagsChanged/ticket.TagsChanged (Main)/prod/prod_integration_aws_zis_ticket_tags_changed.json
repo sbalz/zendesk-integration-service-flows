@@ -1,0 +1,320 @@
+{
+  "zis_template_version": "2019-10-14",
+  "name": "AWS ZIS TicketTagsChanged",
+  "description": "Listens to ZIS event 'ticket.TagsChanged' and starts an Amazon States Language workflow with conditional branches, data transformations, and API calls.",
+  "resources": {
+    "JobSpec": {
+      "type": "ZIS::JobSpec",
+      "properties": {
+        "name": "TicketTagsChangedJobSpec",
+        "event_source": "support",
+        "event_type": "ticket.TagsChanged",
+        "flow_name": "zis:{{ticket_tags_changed}}:flow:TicketTagsChangedFlow"
+      }
+    },
+    "Flow": {
+      "type": "ZIS::Flow",
+      "properties": {
+        "name": "TicketTagsChangedFlow",
+        "definition": {
+          "StartAt": "action.CheckScenarioTag",
+          "States": {
+            "action.CheckScenarioTag": {
+              "Type": "Action",
+              "ActionName": "zis:common:transform:Jq",
+              "Comment": "Check if Ticket tags contain a 'Scenario Tag'.",
+              "Parameters": {
+                "expr": "(.input.ticket_event.tags_added[] | select(. == \"side_conversation_updated\" or . == \"confirmation_public_comment_sent\" or . == \"for_ticket_bot_automation_created\" or . == \"for_ticket_bot_automation_updated\"))",
+                "data.$": "$"
+              },
+              "ResultPath": "$.ScenarioTagResult",
+              "Next": "choice.CheckScenarioTagResult"
+            },
+            "choice.CheckScenarioTagResult": {
+              "Type": "Choice",
+              "Comment": "Check which scenario tag is present.",
+              "Choices": [
+                {
+                  "And": [
+                    {
+                      "Variable": "$.ScenarioTagResult",
+                      "StringEquals": "side_conversation_updated"
+                    }
+                  ],
+                  "Next": "wait.FiveSeconds1"
+                },
+                {
+                  "And": [
+                    {
+                      "Variable": "$.ScenarioTagResult",
+                      "StringEquals": "confirmation_public_comment_sent"
+                    }
+                  ],
+                  "Next": "wait.FiveSeconds2"
+                },
+                {
+                  "And": [
+                    {
+                      "Variable": "$.ScenarioTagResult",
+                      "StringEquals": "for_ticket_bot_automation_created"
+                    }
+                  ],
+                  "Next": "wait.TwentySeconds"
+                },
+                {
+                  "And": [
+                    {
+                      "Variable": "$.ScenarioTagResult",
+                      "StringEquals": "for_ticket_bot_automation_updated"
+                    }
+                  ],
+                  "Next": "wait.TwentySeconds"
+                }
+              ],
+              "Default": "NoExecutionTag"
+            },
+            "wait.FiveSeconds1": {
+              "Type": "Wait",
+              "Seconds": 5,
+              "Comment": "Wait 5 seconds before executing the next Action.",
+              "Next": "action.GetSideConversations"
+            },
+            "action.GetSideConversations": {
+              "Type": "Action",
+              "ActionName": "zis:{{ticket_tags_changed}}:action:get_side_conversations",
+              "Comment": "Get all Side Conversations from Ticket.",
+              "Parameters": {
+                "ticket_id.$": "$.input.ticket_event.ticket.id"
+              },
+              "ResultPath": "$.SideConversations",
+              "Next": "action.CheckLatestUpdatedAndExtractUUID"
+            },
+            "action.CheckLatestUpdatedAndExtractUUID": {
+              "Type": "Action",
+              "ActionName": "zis:common:transform:Jq",
+              "Comment": "Check the latest update in side conversations and extract the UUID.",
+              "Parameters": {
+                "expr": ".side_conversations | max_by(.message_added_at) | .url | gsub(\".*/side_conversations/\"; \"\")",
+                "data.$": "$.SideConversations"
+              },
+              "ResultPath": "$.LatestUpdatedUUID",
+              "Next": "action.GetLatestSideConversationsEvents"
+            },
+            "action.GetLatestSideConversationsEvents": {
+              "Type": "Action",
+              "ActionName": "zis:{{ticket_tags_changed}}:action:get_latest_side_conversations_events",
+              "Comment": "Get Events from latest Side Conversations.",
+              "Parameters": {
+                "ticket_id.$": "$.input.ticket_event.ticket.id",
+                "side_conversation_id.$": "$.LatestUpdatedUUID"
+              },
+              "ResultPath": "$.LatestSideConversations",
+              "Next": "action.CheckLatestUpdatedAndExtractChannel"
+            },
+            "action.CheckLatestUpdatedAndExtractChannel": {
+              "Type": "Action",
+              "ActionName": "zis:common:transform:Jq",
+              "Comment": "Check Channel of the latest update in Side Conversations.",
+              "Parameters": {
+                "expr": ".events | max_by(.created_at) | .via",
+                "data.$": "$.LatestSideConversations"
+              },
+              "ResultPath": "$.LatestUpdateChannel",
+              "Next": "choice.CheckUpdateChannel"
+            },
+            "choice.CheckUpdateChannel": {
+              "Type": "Choice",
+              "Comment": "Decision to execute 'Process macro' job or to skip it.",
+              "Choices": [
+                {
+                  "Variable": "$.LatestUpdateChannel",
+                  "StringEquals": "email",
+                  "Next": "action.UpdateSideConversationTicket"
+                }
+              ],
+              "Default": "action.FallbackSideConversationTicket"
+            },
+            "action.UpdateSideConversationTicket": {
+              "Type": "Action",
+              "ActionName": "zis:{{ticket_tags_changed}}:action:update_side_conversation_ticket",
+              "Comment": "Open in Ticket.",
+              "Parameters": {
+                "ticket_id.$": "$.input.ticket_event.ticket.id"
+              },
+              "Next": "FlowEnd"
+            },
+            "action.FallbackSideConversationTicket": {
+              "Type": "Action",
+              "ActionName": "zis:{{ticket_tags_changed}}:action:fallback_side_conversation_ticket",
+              "Comment": "Open in Ticket.",
+              "Parameters": {
+                "ticket_id.$": "$.input.ticket_event.ticket.id"
+              },
+              "Next": "FlowEnd"
+            },
+            "wait.FiveSeconds2": {
+              "Type": "Wait",
+              "Seconds": 5,
+              "Comment": "Wait 5 seconds before executing the next Action.",
+              "Next": "action.ConfirmationCommentSent"
+            },
+            "action.ConfirmationCommentSent": {
+              "Type": "Action",
+              "ActionName": "zis:{{ticket_tags_changed}}:action:confirmation_comment_sent",
+              "Comment": "Put '{{dc.confirmation_comment_sent}}' Content in Ticket.",
+              "Parameters": {
+                "ticket_id.$": "$.input.ticket_event.ticket.id"
+              },
+              "Next": "FlowEnd"
+            },
+            "wait.TwentySeconds": {
+              "Type": "Wait",
+              "Seconds": 20,
+              "Comment": "Wait 20 seconds before executing the next Action.",
+              "Next": "action.TriggerTicketBotAutomationWebhook"
+            },
+            "action.TriggerTicketBotAutomationWebhook": {
+              "Type": "Action",
+              "ActionName": "zis:{{ticket_tags_changed}}:action:trigger_ticketbot_automation_webhook",
+              "Comment": "Add 'notify_ticket_bot_for_automation' Tag to Ticket.",
+              "Parameters": {
+                "ticket_id.$": "$.input.ticket_event.ticket.id"
+              },
+              "Next": "FlowEnd"
+            },
+            "NoExecutionTag": {
+              "Type": "Succeed",
+              "Comment": "Log",
+              "Message": "✅ - Ticket ID: {{$.input.ticket_event.ticket.id}}; No 'Execution Tag'"
+            },
+            "FlowEnd": {
+              "Type": "Succeed",
+              "Comment": "Log",
+              "Message": "✅ - Ticket ID: {{$.input.ticket_event.ticket.id}}; Scenario: '{{$.ScenarioTagResult}}' was executed successfully."
+            }
+          }
+        }
+      }
+    },
+    "action.GetSideConversations": {
+      "type": "ZIS::Action::Http",
+      "properties": {
+        "name": "get_side_conversations",
+        "definition": {
+          "method": "GET",
+          "path": "/api/v2/tickets/{{$.ticket_id}}/side_conversations",
+          "requestBody": {},
+          "connectionName": "zendesk"
+        }
+      }
+    },
+    "action.GetLatestSideConversationsEvents": {
+      "type": "ZIS::Action::Http",
+      "properties": {
+        "name": "get_latest_side_conversations_events",
+        "definition": {
+          "method": "GET",
+          "path": "/api/v2/tickets/{{$.ticket_id}}/side_conversations/{{$.side_conversation_id}}/events",
+          "requestBody": {},
+          "connectionName": "zendesk"
+        }
+      }
+    },
+    "action.UpdateSideConversationTicket": {
+      "type": "ZIS::Action::Http",
+      "properties": {
+        "name": "update_side_conversation_ticket",
+        "definition": {
+          "method": "PUT",
+          "path": "/api/v2/tickets/update_many.json?ids={{$.ticket_id}}",
+          "requestBody": {
+            "ticket": {
+              "status": "open",
+              "additional_tags": [
+                "tkt_nt_zis_tag_based_system_note_or_operation"
+              ],
+              "remove_tags": ["side_conversation_updated"]
+            }
+          },
+          "connectionName": "zendesk"
+        }
+      }
+    },
+    "action.FallbackSideConversationTicket": {
+      "type": "ZIS::Action::Http",
+      "properties": {
+        "name": "fallback_side_conversation_ticket",
+        "definition": {
+          "method": "PUT",
+          "path": "/api/v2/tickets/update_many.json?ids={{$.ticket_id}}",
+          "requestBody": {
+            "ticket": {
+              "additional_tags": [
+                "tkt_nt_zis_tag_based_system_note_or_operation"
+              ],
+              "remove_tags": ["side_conversation_updated"]
+            }
+          },
+          "connectionName": "zendesk"
+        }
+      }
+    },
+    "action.ConfirmationCommentSent": {
+      "type": "ZIS::Action::Http",
+      "properties": {
+        "name": "confirmation_comment_sent",
+        "definition": {
+          "method": "PUT",
+          "path": "/api/v2/tickets/update_many.json?ids={{$.ticket_id}}",
+          "requestBody": {
+            "ticket": {
+              "comment": {
+                "body": "{{dc.confirmation_comment_sent}}",
+                "public": false
+              },
+              "additional_tags": [
+                "tkt_nt_zis_tag_based_system_note_or_operation"
+              ],
+              "remove_tags": ["confirmation_public_comment_sent"]
+            }
+          },
+          "connectionName": "zendesk"
+        }
+      }
+    },
+    "action.TriggerTicketBotAutomationWebhook": {
+      "type": "ZIS::Action::Http",
+      "properties": {
+        "name": "trigger_ticketbot_automation_webhook",
+        "definition": {
+          "method": "PUT",
+          "path": "/api/v2/tickets/update_many.json?ids={{$.ticket_id}}",
+          "requestBody": {
+            "ticket": {
+              "additional_tags": [
+                "tkt_nt_zis_tag_based_system_note_or_operation",
+                "notify_ticket_bot_for_automation"
+              ],
+              "remove_tags": [
+                "for_ticket_bot_automation_created",
+                "for_ticket_bot_automation_updated"
+              ]
+            }
+          },
+          "connectionName": "zendesk"
+        }
+      }
+    },
+    "action.PostWebhook": {
+      "type": "ZIS::Action::Http",
+      "properties": {
+        "name": "post_webhook",
+        "definition": {
+          "method": "POST",
+          "url": "{{https_endpoint_zis_testing}}",
+          "requestBody": "$.payload"
+        }
+      }
+    }
+  }
+}
