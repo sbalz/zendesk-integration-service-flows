@@ -194,7 +194,7 @@
                                     "Next": "wait.TenSeconds2"
                                 }
                             ],
-                            "Default": "action.CheckEndUserFollowUp"
+                            "Default": "action.GetDayOfWeek"
                         },
                         "wait.TenSeconds2": {
                             "Type": "Wait",
@@ -209,7 +209,7 @@
                             "Parameters": {
                                 "ticket_id.$": "$.input.ticket_event.ticket.id"
                             },
-                            "Next": "action.CheckEndUserFollowUp"
+                            "Next": "action.GetDayOfWeek"
                         },
                         "action.GetDayOfWeek": {
                             "Type": "Action",
@@ -224,7 +224,7 @@
                         },
                         "choice.CheckDayOfWeek": {
                             "Type": "Choice",
-                            "Comment": "Return true if Monday, Tuesday, or Wednesday, otherwise false.",
+                            "Comment": "Check if the day of the week is Monday, Tuesday, or Wednesday.",
                             "Choices": [
                                 {
                                     "Or": [
@@ -234,11 +234,11 @@
                                         },
                                         {
                                             "Variable": "$.DayOfWeekResult",
-                                            "StringEquals": "Tuesday"
+                                            "StringEquals": "Wednesday"
                                         },
                                         {
                                             "Variable": "$.DayOfWeekResult",
-                                            "StringEquals": "Wednesday"
+                                            "StringEquals": "Thursday"
                                         }
                                     ],
                                     "Next": "action.KunAdminReminderDelayTag"
@@ -249,9 +249,9 @@
                         "action.KunAdminReminderDelayTag": {
                             "Type": "Action",
                             "ActionName": "zis:common:transform:Jq",
-                            "Comment": "Check if Ticket tags contain 'zis_webhook_delay_selection'",
+                            "Comment": "Check if Ticket tags contain 'kununu_admin_ticket' and 'mtw_3day_reminder_selection'",
                             "Parameters": {
-                                "expr": "(.input.ticket_event.ticket.tags | contains([\"kununu_admin_ticket\", \"mtw_3day_reminder_selection\"])) | if . then true else false end",
+                                "expr": "(.input.ticket_event.ticket.tags | contains([\"kununu_admin_ticket\", \"mtw_3day_reminder_selection\"]))",
                                 "data.$": "$"
                             },
                             "ResultPath": "$.KunAdminReminderTagResult",
@@ -272,15 +272,16 @@
                         "wait.TenSeconds3": {
                             "Type": "Wait",
                             "Seconds": 10,
-                            "Comment": "Wait 10 Seconds before executing the next Action.",
-                            "Next": "action.BulkUpdateTicket"
+                            "Comment": "Wait 10 seconds before executing the next action.",
+                            "Next": "action.AddTagsKunAdminReminder"
                         },
                         "action.AddTagsKunAdminReminder": {
                             "Type": "Action",
-                            "ActionName": "zis:{{ticket_created}}:action:add_tags_auto_reply",
-                            "Comment": "Add Tag 'mtw_3day_reminder_selection_{{ticket.created_at | date: '%A' | downcase}}'",
+                            "ActionName": "zis:{{ticket_created}}:action:add_tags_kunAdmin_reminder",
+                            "Comment": "Add Tag for the day of the week.",
                             "Parameters": {
-                                "ticket_id.$": "$.input.ticket_event.ticket.id"
+                                "ticket_id.$": "$.input.ticket_event.ticket.id",
+                                "day_of_week.$": "$.DayOfWeekResult"
                             },
                             "Next": "action.CheckEndUserFollowUp"
                         },
@@ -448,14 +449,12 @@
         "action.AddTagsKunAdminReminder": {
             "type": "ZIS::Action::Http",
             "properties": {
-                "name": "add_tags_auto_reply",
+                "name": "add_tags_kunAdmin_reminder",
                 "definition": {
                     "method": "PUT",
                     "path": "/api/v2/tickets/{{$.ticket_id}}/tags",
                     "requestBody": {
-                        "tags": [
-                            "mtw_3day_reminder_selection_{{$.DayOfWeekResult | downcase}}"
-                        ]
+                        "tags": ["mtw_3day_reminder_selection_{{$.day_of_week}}"]
                     },
                     "connectionName": "zendesk"
                 }
