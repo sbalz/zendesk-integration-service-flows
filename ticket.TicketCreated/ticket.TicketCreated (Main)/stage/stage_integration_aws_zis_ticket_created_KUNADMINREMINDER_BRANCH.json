@@ -234,11 +234,11 @@
                                         },
                                         {
                                             "Variable": "$.DayOfWeekResult",
-                                            "StringEquals": "Wednesday"
+                                            "StringEquals": "Tuesday"
                                         },
                                         {
                                             "Variable": "$.DayOfWeekResult",
-                                            "StringEquals": "Thursday"
+                                            "StringEquals": "Wednesday"
                                         }
                                     ],
                                     "Next": "action.KunAdminReminderDelayTag"
