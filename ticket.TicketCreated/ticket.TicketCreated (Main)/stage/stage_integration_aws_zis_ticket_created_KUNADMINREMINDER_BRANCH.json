@@ -454,7 +454,7 @@
                     "method": "PUT",
                     "path": "/api/v2/tickets/{{$.ticket_id}}/tags",
                     "requestBody": {
-                        "tags": ["for_mtw_3day_reminder_created_{{$.day_of_week}}"]
+                        "tags": ["mtw_3day_reminder_{{$.day_of_week}}"]
                     },
                     "connectionName": "zendesk"
                 }
