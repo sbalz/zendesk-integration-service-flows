@@ -249,9 +249,9 @@
                         "action.KunAdminReminderDelayTag": {
                             "Type": "Action",
                             "ActionName": "zis:common:transform:Jq",
-                            "Comment": "Check if Ticket tags contain 'kununu_admin_ticket' and 'mtw_3day_reminder_selection'",
+                            "Comment": "Check if Ticket tags contain 'kununu_admin_ticket' and 'mtw_3day_reminder'",
                             "Parameters": {
-                                "expr": "(.input.ticket_event.ticket.tags | contains([\"kununu_admin_ticket\", \"mtw_3day_reminder_selection\"]))",
+                                "expr": "(.input.ticket_event.ticket.tags | contains([\"kununu_admin_ticket\", \"mtw_3day_reminder\"]))",
                                 "data.$": "$"
                             },
                             "ResultPath": "$.KunAdminReminderTagResult",
@@ -454,7 +454,7 @@
                     "method": "PUT",
                     "path": "/api/v2/tickets/{{$.ticket_id}}/tags",
                     "requestBody": {
-                        "tags": ["mtw_3day_reminder_selection_{{$.day_of_week}}"]
+                        "tags": ["for_mtw_3day_reminder_created_{{$.day_of_week}}"]
                     },
                     "connectionName": "zendesk"
                 }
