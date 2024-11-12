@@ -1,131 +1,131 @@
 {
-  "zis_template_version": "2019-10-14",
-  "name": "AWS ZIS user.CustomRoleChanged",
-  "description": "Listens to ZIS event 'user.CustomRoleChanged' and starts an Amazon States Language workflow that can contain conditional branches, data transformations, and API calls.",
-  "resources": {
-    "JobSpec": {
-      "type": "ZIS::JobSpec",
-      "properties": {
-        "name": "UserCustomRoleChangedJobSpec",
-        "event_source": "support",
-        "event_type": "user.CustomRoleChanged",
-        "flow_name": "zis:{{user_custom_role_changed}}:flow:UserCustomRoleChangedFlow"
-      }
-    },
-    "Flow": {
-      "type": "ZIS::Flow",
-      "properties": {
-        "name": "UserCustomRoleChangedFlow",
-        "definition": {
-          "StartAt": "wait.fiveSeconds1",
-          "States": {
-            "wait.fiveSeconds1": {
-              "Type": "Wait",
-              "Seconds": 5,
-              "Comment": "Wait 5 Seconds before executing the next Action.",
-              "Next": "action.FilterCustomRole"
-            },
-            "action.FilterCustomRole": {
-              "Type": "Action",
-              "ActionName": "zis:common:transform:Jq",
-              "Comment": "Check if the Custom Role has been changed to Light Agent.",
-              "Parameters": {
-                "expr": ".input.user_event.current == {{light_agent_role_id}}",
-                "data.$": "$"
-              },
-              "ResultPath": "$.CustomRoleIsLightAgent",
-              "Next": "choice.CheckCustomRole"
-            },
-            "choice.CheckCustomRole": {
-              "Type": "Choice",
-              "Comment": "Decision to Continue or End the Flow.",
-              "Choices": [
-                {
-                  "Variable": "$.CustomRoleIsLightAgent",
-                  "BooleanEquals": true,
-                  "Next": "action.UpdateUserCheck"
+    "zis_template_version": "2019-10-14",
+    "name": "AWS ZIS user.CustomRoleChanged",
+    "description": "Listens to ZIS event 'user.CustomRoleChanged' and starts an Amazon States Language workflow that can contain conditional branches, data transformations, and API calls.",
+    "resources": {
+        "JobSpec": {
+            "type": "ZIS::JobSpec",
+            "properties": {
+                "name": "UserCustomRoleChangedJobSpec",
+                "event_source": "support",
+                "event_type": "user.CustomRoleChanged",
+                "flow_name": "zis:{{user_custom_role_changed}}:flow:UserCustomRoleChangedFlow"
+            }
+        },
+        "Flow": {
+            "type": "ZIS::Flow",
+            "properties": {
+                "name": "UserCustomRoleChangedFlow",
+                "definition": {
+                    "StartAt": "wait.fiveSeconds1",
+                    "States": {
+                        "wait.fiveSeconds1": {
+                            "Type": "Wait",
+                            "Seconds": 5,
+                            "Comment": "Wait 5 Seconds before executing the next Action.",
+                            "Next": "action.FilterCustomRole"
+                        },
+                        "action.FilterCustomRole": {
+                            "Type": "Action",
+                            "ActionName": "zis:common:transform:Jq",
+                            "Comment": "Check if the Custom Role has been changed to Light Agent.",
+                            "Parameters": {
+                                "expr": ".input.user_event.current == {{light_agent_role_id}}",
+                                "data.$": "$"
+                            },
+                            "ResultPath": "$.CustomRoleIsLightAgent",
+                            "Next": "choice.CheckCustomRole"
+                        },
+                        "choice.CheckCustomRole": {
+                            "Type": "Choice",
+                            "Comment": "Decision to Continue or End the Flow.",
+                            "Choices": [
+                                {
+                                    "Variable": "$.CustomRoleIsLightAgent",
+                                    "BooleanEquals": true,
+                                    "Next": "action.UpdateUserCheck"
+                                }
+                            ],
+                            "Default": "action.UpdateUserUncheck"
+                        },
+                        "action.UpdateUserCheck": {
+                            "Type": "Action",
+                            "ActionName": "zis:{{user_custom_role_changed}}:action:update_user_check",
+                            "Comment": "Check 'is_light_agent' in User Profile.",
+                            "Parameters": {
+                                "user_id.$": "$.input.user_event.user.id"
+                            },
+                            "Next": "succeed.FlowEndCheck"
+                        },
+                        "succeed.FlowEndCheck": {
+                            "Type": "Succeed",
+                            "Comment": "Log",
+                            "Message": "✅ - User ID: {{$.input.user_event.user.id}}; User's role has changed. checked: 'is_light_agent' - Role Details: [{{$.input.user_event.user.role}}]({{$.input.user_event.current}})"
+                        },
+                        "action.UpdateUserUncheck": {
+                            "Type": "Action",
+                            "ActionName": "zis:{{user_custom_role_changed}}:action:update_user_uncheck",
+                            "Comment": "Uncheck 'is_light_agent' in User Profile.",
+                            "Parameters": {
+                                "user_id.$": "$.input.user_event.user.id"
+                            },
+                            "Next": "succeed.FlowEndUncheck"
+                        },
+                        "succeed.FlowEndUncheck": {
+                            "Type": "Succeed",
+                            "Comment": "Log",
+                            "Message": "✅ - User ID: {{$.input.user_event.user.id}}; User's role has changed. unchecked: 'is_light_agent' - Role Details: [{{$.input.user_event.user.role}}]({{$.input.user_event.current}})"
+                        }
+                    }
                 }
-              ],
-              "Default": "action.UpdateUserUncheck"
-            },
-            "action.UpdateUserCheck": {
-              "Type": "Action",
-              "ActionName": "zis:{{user_custom_role_changed}}:action:update_user_check",
-              "Comment": "Check 'is_light_agent' in User Profile.",
-              "Parameters": {
-                "user_id.$": "$.input.user_event.user.id"
-              },
-              "Next": "succeed.FlowEndCheck"
-            },
-            "succeed.FlowEndCheck": {
-              "Type": "Succeed",
-              "Comment": "Log",
-              "Message": "✅ - User ID: {{$.input.user_event.user.id}}; User's role has changed. checked: 'is_light_agent' - Role Details: [{{$.input.user_event.user.role}}]({{$.input.user_event.current}})"
-            },
-            "action.UpdateUserUncheck": {
-              "Type": "Action",
-              "ActionName": "zis:{{user_custom_role_changed}}:action:update_user_uncheck",
-              "Comment": "Uncheck 'is_light_agent' in User Profile.",
-              "Parameters": {
-                "user_id.$": "$.input.user_event.user.id"
-              },
-              "Next": "succeed.FlowEndUncheck"
-            },
-            "succeed.FlowEndUncheck": {
-              "Type": "Succeed",
-              "Comment": "Log",
-              "Message": "✅ - User ID: {{$.input.user_event.user.id}}; User's role has changed. unchecked: 'is_light_agent' - Role Details: [{{$.input.user_event.user.role}}]({{$.input.user_event.current}})"
             }
-          }
-        }
-      }
-    },
-    "action.UpdateUserCheck": {
-      "type": "ZIS::Action::Http",
-      "properties": {
-        "name": "update_user_check",
-        "definition": {
-          "method": "PUT",
-          "path": "/api/v2/users/{{$.user_id}}",
-          "requestBody": {
-            "user": {
-              "user_fields": {
-                "usr_is_light_agent": true
-              }
+        },
+        "action.UpdateUserCheck": {
+            "type": "ZIS::Action::Http",
+            "properties": {
+                "name": "update_user_check",
+                "definition": {
+                    "method": "PUT",
+                    "path": "/api/v2/users/{{$.user_id}}",
+                    "requestBody": {
+                        "user": {
+                            "user_fields": {
+                                "usr_is_light_agent": true
+                            }
+                        }
+                    },
+                    "connectionName": "zendesk"
+                }
             }
-          },
-          "connectionName": "zendesk"
-        }
-      }
-    },
-    "action.UpdateUserUncheck": {
-      "type": "ZIS::Action::Http",
-      "properties": {
-        "name": "update_user_uncheck",
-        "definition": {
-          "method": "PUT",
-          "path": "/api/v2/users/{{$.user_id}}",
-          "requestBody": {
-            "user": {
-              "user_fields": {
-                "usr_is_light_agent": false
-              }
+        },
+        "action.UpdateUserUncheck": {
+            "type": "ZIS::Action::Http",
+            "properties": {
+                "name": "update_user_uncheck",
+                "definition": {
+                    "method": "PUT",
+                    "path": "/api/v2/users/{{$.user_id}}",
+                    "requestBody": {
+                        "user": {
+                            "user_fields": {
+                                "usr_is_light_agent": false
+                            }
+                        }
+                    },
+                    "connectionName": "zendesk"
+                }
             }
-          },
-          "connectionName": "zendesk"
+        },
+        "action.PostWebhook": {
+            "type": "ZIS::Action::Http",
+            "properties": {
+                "name": "post_webhook",
+                "definition": {
+                    "method": "POST",
+                    "url": "{{https_endpoint_zis_testing}}",
+                    "requestBody": "$.payload"
+                }
+            }
         }
-      }
-    },
-    "action.PostWebhook": {
-      "type": "ZIS::Action::Http",
-      "properties": {
-        "name": "post_webhook",
-        "definition": {
-          "method": "POST",
-          "url": "{{https_endpoint_zis_testing}}",
-          "requestBody": "$.payload"
-        }
-      }
     }
-  }
 }

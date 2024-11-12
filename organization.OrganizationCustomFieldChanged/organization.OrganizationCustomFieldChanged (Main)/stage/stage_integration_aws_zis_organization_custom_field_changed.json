@@ -1,190 +1,190 @@
 {
-  "zis_template_version": "2019-10-14",
-  "name": "ZIS organization.OrganizationCustomFieldChanged",
-  "description": "Listens to ZIS event 'organization.CustomFieldChanged' and starts an Amazon States Language workflow und can contain conditional branches, data transformations, and API calls.",
-  "resources": {
-    "JobSpec": {
-      "type": "ZIS::JobSpec",
-      "properties": {
-        "name": "OrganizationCustomFieldChangedJobSpec",
-        "event_source": "support",
-        "event_type": "organization.CustomFieldChanged",
-        "flow_name": "zis:{{organization_custom_field_changed}}:flow:OrganizationCustomFieldChangedFlow"
-      }
-    },
-    "Flow": {
-      "type": "ZIS::Flow",
-      "properties": {
-        "name": "OrganizationCustomFieldChangedFlow",
-        "definition": {
-          "StartAt": "action.CheckOrganizationFieldID",
-          "States": {
-            "action.CheckOrganizationFieldID": {
-              "Type": "Action",
-              "ActionName": "zis:common:transform:Jq",
-              "Comment": "Check if correct Organization Field has changed.",
-              "Parameters": {
-                "expr": ".input.organization_event.custom_field.id == {{account_type_organization_field_id}} or .input.organization_event.custom_field.id == {{owner_role_organization_field_id}}",
-                "data.$": "$"
-              },
-              "ResultPath": "$.OrganizationFieldID",
-              "Next": "choice.CheckOrganizationFieldIDResult"
-            },
-            "choice.CheckOrganizationFieldIDResult": {
-              "Type": "Choice",
-              "Comment": "Decision to execute 'Sync Pooled Accounts' job or to skip it.",
-              "Choices": [
-                {
-                  "Variable": "$.OrganizationFieldID",
-                  "BooleanEquals": true,
-                  "Next": "action.ShowOrganization"
+    "zis_template_version": "2019-10-14",
+    "name": "ZIS organization.OrganizationCustomFieldChanged",
+    "description": "Listens to ZIS event 'organization.CustomFieldChanged' and starts an Amazon States Language workflow und can contain conditional branches, data transformations, and API calls.",
+    "resources": {
+        "JobSpec": {
+            "type": "ZIS::JobSpec",
+            "properties": {
+                "name": "OrganizationCustomFieldChangedJobSpec",
+                "event_source": "support",
+                "event_type": "organization.CustomFieldChanged",
+                "flow_name": "zis:{{organization_custom_field_changed}}:flow:OrganizationCustomFieldChangedFlow"
+            }
+        },
+        "Flow": {
+            "type": "ZIS::Flow",
+            "properties": {
+                "name": "OrganizationCustomFieldChangedFlow",
+                "definition": {
+                    "StartAt": "action.CheckOrganizationFieldID",
+                    "States": {
+                        "action.CheckOrganizationFieldID": {
+                            "Type": "Action",
+                            "ActionName": "zis:common:transform:Jq",
+                            "Comment": "Check if correct Organization Field has changed.",
+                            "Parameters": {
+                                "expr": ".input.organization_event.custom_field.id == {{account_type_organization_field_id}} or .input.organization_event.custom_field.id == {{owner_role_organization_field_id}}",
+                                "data.$": "$"
+                            },
+                            "ResultPath": "$.OrganizationFieldID",
+                            "Next": "choice.CheckOrganizationFieldIDResult"
+                        },
+                        "choice.CheckOrganizationFieldIDResult": {
+                            "Type": "Choice",
+                            "Comment": "Decision to execute 'Sync Pooled Accounts' job or to skip it.",
+                            "Choices": [
+                                {
+                                    "Variable": "$.OrganizationFieldID",
+                                    "BooleanEquals": true,
+                                    "Next": "action.ShowOrganization"
+                                }
+                            ],
+                            "Default": "succeed.DifferentOrganizationField"
+                        },
+                        "action.ShowOrganization": {
+                            "Type": "Action",
+                            "ActionName": "zis:{{organization_custom_field_changed}}:action:show_organization",
+                            "Comment": "Get Organization Data.",
+                            "Parameters": {
+                                "organization_id.$": "$.input.organization_event.organization.id"
+                            },
+                            "ResultPath": "$.fetched_organization",
+                            "Next": "wait.FiveSeconds1"
+                        },
+                        "wait.FiveSeconds1": {
+                            "Type": "Wait",
+                            "Seconds": 5,
+                            "Comment": "Wait 5 seconds before executing the next action.",
+                            "Next": "action.ExtractAccountTypeValue"
+                        },
+                        "action.ExtractAccountTypeValue": {
+                            "Type": "Action",
+                            "ActionName": "zis:common:transform:Jq",
+                            "Comment": "Extract value of the Organization's Account type.",
+                            "Parameters": {
+                                "expr": "(\"org_account_type_\" + (.organization.organization_fields.SF_account_type | gsub(\"[ -]\"; \"_\") | gsub(\"[_]+\"; \"_\") | ascii_downcase)) | gsub(\"[ ]\"; \"\")",
+                                "data.$": "$.fetched_organization"
+                            },
+                            "ResultPath": "$.AccountTypeValue",
+                            "Next": "action.CheckOwnerRoleValue"
+                        },
+                        "action.CheckOwnerRoleValue": {
+                            "Type": "Action",
+                            "ActionName": "zis:common:transform:Jq",
+                            "Comment": "Check if an Owner role of Organization is 'Pooled Accounts'.",
+                            "Parameters": {
+                                "expr": ".input.organization_event.current == \"Pooled Accounts\"",
+                                "data.$": "$"
+                            },
+                            "ResultPath": "$.PooledAccountPresent",
+                            "Next": "choice.CheckOwnerRoleValueResult"
+                        },
+                        "choice.CheckOwnerRoleValueResult": {
+                            "Type": "Choice",
+                            "Comment": "Decision to execute 'Sync Pooled Accounts Checkbox' job or to skip it.",
+                            "Choices": [
+                                {
+                                    "Variable": "$.PooledAccountPresent",
+                                    "BooleanEquals": true,
+                                    "Next": "action.CheckPooledAccount"
+                                }
+                            ],
+                            "Default": "action.UnCheckPooledAccount"
+                        },
+                        "action.CheckPooledAccount": {
+                            "Type": "Action",
+                            "ActionName": "zis:{{organization_custom_field_changed}}:action:check_pooled_account",
+                            "Comment": "Set 'Pooled Account'.",
+                            "Parameters": {
+                                "organization_id.$": "$.input.organization_event.organization.id",
+                                "account_type.$": "$.AccountTypeValue"
+                            },
+                            "Next": "succeed.FlowEnd"
+                        },
+                        "action.UnCheckPooledAccount": {
+                            "Type": "Action",
+                            "ActionName": "zis:{{organization_custom_field_changed}}:action:uncheck_pooled_account",
+                            "Comment": "Remove 'Pooled Account'.",
+                            "Parameters": {
+                                "organization_id.$": "$.input.organization_event.organization.id",
+                                "account_type.$": "$.AccountTypeValue"
+                            },
+                            "Next": "succeed.FlowEnd"
+                        },
+                        "succeed.FlowEnd": {
+                            "Type": "Succeed",
+                            "Comment": "Workflow completed successfully",
+                            "Message": "✅ - Organization ID: {{$.input.organization_event.organization.id}}; The workflow has been fully executed."
+                        },
+                        "succeed.DifferentOrganizationField": {
+                            "Type": "Succeed",
+                            "Comment": "Log",
+                            "Message": "ℹ️ - Organization ID: {{$.input.organization_event.organization.id}}; Skipped, as a different Organization Field has changed."
+                        }
+                    }
                 }
-              ],
-              "Default": "succeed.DifferentOrganizationField"
-            },
-            "action.ShowOrganization": {
-              "Type": "Action",
-              "ActionName": "zis:{{organization_custom_field_changed}}:action:show_organization",
-              "Comment": "Get Organization Data.",
-              "Parameters": {
-                "organization_id.$": "$.input.organization_event.organization.id"
-              },
-              "ResultPath": "$.fetched_organization",
-              "Next": "wait.FiveSeconds1"
-            },
-            "wait.FiveSeconds1": {
-              "Type": "Wait",
-              "Seconds": 5,
-              "Comment": "Wait 5 seconds before executing the next action.",
-              "Next": "action.ExtractAccountTypeValue"
-            },
-            "action.ExtractAccountTypeValue": {
-              "Type": "Action",
-              "ActionName": "zis:common:transform:Jq",
-              "Comment": "Extract value of the Organization's Account type.",
-              "Parameters": {
-                "expr": "(\"org_account_type_\" + (.organization.organization_fields.SF_account_type | gsub(\"[ -]\"; \"_\") | gsub(\"[_]+\"; \"_\") | ascii_downcase)) | gsub(\"[ ]\"; \"\")",
-                "data.$": "$.fetched_organization"
-              },
-              "ResultPath": "$.AccountTypeValue",
-              "Next": "action.CheckOwnerRoleValue"
-            },
-            "action.CheckOwnerRoleValue": {
-              "Type": "Action",
-              "ActionName": "zis:common:transform:Jq",
-              "Comment": "Check if an Owner role of Organization is 'Pooled Accounts'.",
-              "Parameters": {
-                "expr": ".input.organization_event.current == \"Pooled Accounts\"",
-                "data.$": "$"
-              },
-              "ResultPath": "$.PooledAccountPresent",
-              "Next": "choice.CheckOwnerRoleValueResult"
-            },
-            "choice.CheckOwnerRoleValueResult": {
-              "Type": "Choice",
-              "Comment": "Decision to execute 'Sync Pooled Accounts Checkbox' job or to skip it.",
-              "Choices": [
-                {
-                  "Variable": "$.PooledAccountPresent",
-                  "BooleanEquals": true,
-                  "Next": "action.CheckPooledAccount"
+            }
+        },
+        "ShowOrganization": {
+            "type": "ZIS::Action::Http",
+            "properties": {
+                "name": "show_organization",
+                "definition": {
+                    "method": "GET",
+                    "path": "/api/v2/organizations/{{$.organization_id}}.json",
+                    "connectionName": "zendesk"
                 }
-              ],
-              "Default": "action.UnCheckPooledAccount"
-            },
-            "action.CheckPooledAccount": {
-              "Type": "Action",
-              "ActionName": "zis:{{organization_custom_field_changed}}:action:check_pooled_account",
-              "Comment": "Set 'Pooled Account'.",
-              "Parameters": {
-                "organization_id.$": "$.input.organization_event.organization.id",
-                "account_type.$": "$.AccountTypeValue"
-              },
-              "Next": "succeed.FlowEnd"
-            },
-            "action.UnCheckPooledAccount": {
-              "Type": "Action",
-              "ActionName": "zis:{{organization_custom_field_changed}}:action:uncheck_pooled_account",
-              "Comment": "Remove 'Pooled Account'.",
-              "Parameters": {
-                "organization_id.$": "$.input.organization_event.organization.id",
-                "account_type.$": "$.AccountTypeValue"
-              },
-              "Next": "succeed.FlowEnd"
-            },
-            "succeed.FlowEnd": {
-              "Type": "Succeed",
-              "Comment": "Workflow completed successfully",
-              "Message": "✅ - Organization ID: {{$.input.organization_event.organization.id}}; The workflow has been fully executed."
-            },
-            "succeed.DifferentOrganizationField": {
-              "Type": "Succeed",
-              "Comment": "Log",
-              "Message": "ℹ️ - Organization ID: {{$.input.organization_event.organization.id}}; Skipped, as a different Organization Field has changed."
             }
-          }
-        }
-      }
-    },
-    "ShowOrganization": {
-      "type": "ZIS::Action::Http",
-      "properties": {
-        "name": "show_organization",
-        "definition": {
-          "method": "GET",
-          "path": "/api/v2/organizations/{{$.organization_id}}.json",
-          "connectionName": "zendesk"
-        }
-      }
-    },
-    "CheckPooledAccount": {
-      "type": "ZIS::Action::Http",
-      "properties": {
-        "name": "check_pooled_account",
-        "definition": {
-          "method": "PUT",
-          "path": "/api/v2/organizations/{{$.organization_id}}",
-          "requestBody": {
-            "organization": {
-              "organization_fields": {
-                "pooled_account": true,
-                "organization_class": "{{$.account_type}}"
-              }
+        },
+        "CheckPooledAccount": {
+            "type": "ZIS::Action::Http",
+            "properties": {
+                "name": "check_pooled_account",
+                "definition": {
+                    "method": "PUT",
+                    "path": "/api/v2/organizations/{{$.organization_id}}",
+                    "requestBody": {
+                        "organization": {
+                            "organization_fields": {
+                                "pooled_account": true,
+                                "organization_class": "{{$.account_type}}"
+                            }
+                        }
+                    },
+                    "connectionName": "zendesk"
+                }
             }
-          },
-          "connectionName": "zendesk"
-        }
-      }
-    },
-    "UnCheckPooledAccount": {
-      "type": "ZIS::Action::Http",
-      "properties": {
-        "name": "uncheck_pooled_account",
-        "definition": {
-          "method": "PUT",
-          "path": "/api/v2/organizations/{{$.organization_id}}",
-          "requestBody": {
-            "organization": {
-              "organization_fields": {
-                "pooled_account": false,
-                "organization_class": "{{$.account_type}}"
-              }
+        },
+        "UnCheckPooledAccount": {
+            "type": "ZIS::Action::Http",
+            "properties": {
+                "name": "uncheck_pooled_account",
+                "definition": {
+                    "method": "PUT",
+                    "path": "/api/v2/organizations/{{$.organization_id}}",
+                    "requestBody": {
+                        "organization": {
+                            "organization_fields": {
+                                "pooled_account": false,
+                                "organization_class": "{{$.account_type}}"
+                            }
+                        }
+                    },
+                    "connectionName": "zendesk"
+                }
             }
-          },
-          "connectionName": "zendesk"
+        },
+        "action.PostWebhook": {
+            "type": "ZIS::Action::Http",
+            "properties": {
+                "name": "post_webhook",
+                "definition": {
+                    "method": "POST",
+                    "url": "{{https_endpoint_zis_testing}}",
+                    "requestBody": "$.payload"
+                }
+            }
         }
-      }
-    },
-    "action.PostWebhook": {
-      "type": "ZIS::Action::Http",
-      "properties": {
-        "name": "post_webhook",
-        "definition": {
-          "method": "POST",
-          "url": "{{https_endpoint_zis_testing}}",
-          "requestBody": "$.payload"
-        }
-      }
     }
-  }
 }

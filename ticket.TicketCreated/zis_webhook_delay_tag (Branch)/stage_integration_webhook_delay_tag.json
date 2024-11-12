@@ -82,9 +82,7 @@
                     "method": "PUT",
                     "path": "/api/v2/tickets/{{$.ticket_id}}/tags",
                     "requestBody": {
-                        "tags": [
-                            "tkt_nt_zis_webhook_delay_tag"
-                        ]
+                        "tags": ["tkt_nt_zis_webhook_delay_tag"]
                     },
                     "connectionName": "zendesk"
                 }

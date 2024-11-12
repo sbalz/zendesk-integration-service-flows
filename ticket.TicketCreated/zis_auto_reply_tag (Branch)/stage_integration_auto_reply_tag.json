@@ -82,9 +82,7 @@
                     "method": "PUT",
                     "path": "/api/v2/tickets/{{$.ticket_id}}/tags",
                     "requestBody": {
-                        "tags": [
-                            "tkt_nt_zis_auto_reply_tag"
-                        ]
+                        "tags": ["tkt_nt_zis_auto_reply_tag"]
                     },
                     "connectionName": "zendesk"
                 }
