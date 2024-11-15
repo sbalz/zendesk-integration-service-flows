@@ -138,9 +138,9 @@
                     "method": "POST",
                     "url": "{{https_endpoint_id_portal}}",
                     "requestBody": {
-                        "identifier": "user.CustomRoleChanged",
-                        "environment": "staging",
-                        "user": "$.fetched_user"
+                        "account_id": {{zendesk_account_id}},
+                        "details": "$.fetched_user",
+                        "type": "user.CustomRoleChanged"
                     }
                 }
             }
