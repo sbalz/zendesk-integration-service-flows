@@ -23,6 +23,45 @@
                             "Type": "Wait",
                             "Seconds": 5,
                             "Comment": "Wait 5 Seconds before executing the next Action.",
+                            "Next": "action.FilterRoleAgent"
+                        },
+                        "action.FilterRoleAgent": {
+                            "Type": "Action",
+                            "ActionName": "zis:common:transform:Jq",
+                            "Comment": "Check if the Role is Agent.",
+                            "Parameters": {
+                                "expr": ".input.user_event.user.role == \"agent\"",
+                                "data.$": "$"
+                            },
+                            "ResultPath": "$.RoleIsAgent",
+                            "Next": "choice.CheckRoleAgent"
+                        },
+                        "choice.CheckRoleAgent": {
+                            "Type": "Choice",
+                            "Comment": "Decision to Continue or End the Flow.",
+                            "Choices": [
+                                {
+                                    "Variable": "$.RoleIsAgent",
+                                    "BooleanEquals": true,
+                                    "Next": "action.ShowUser"
+                                }
+                            ],
+                            "Default": "action.UpdateUserUncheck"
+                        },
+                        "action.ShowUser": {
+                            "Type": "Action",
+                            "ActionName": "zis:{{user_custom_role_changed}}:action:show_user",
+                            "Comment": "Get User Data",
+                            "Parameters": {
+                                "user_id.$": "$.input.user_event.user.id"
+                            },
+                            "ResultPath": "$.fetched_user",
+                            "Next": "action.PostFetchedUser"
+                        },
+                        "action.PostFetchedUser": {
+                            "Type": "Action",
+                            "ActionName": "zis:{{user_custom_role_changed}}:action:post_fetched_user",
+                            "Comment": "Post 'fetched_user' to Power Automate Flow.",
                             "Next": "action.FilterCustomRole"
                         },
                         "action.FilterCustomRole": {
@@ -76,6 +115,32 @@
                             "Comment": "Log",
                             "Message": "✅ - User ID: {{$.input.user_event.user.id}}; User's role has changed. unchecked: 'is_light_agent' - Role Details: [{{$.input.user_event.user.role}}]({{$.input.user_event.current}})"
                         }
+                    }
+                }
+            }
+        },
+        "action.ShowUser": {
+            "type": "ZIS::Action::Http",
+            "properties": {
+                "name": "show_user",
+                "definition": {
+                    "method": "GET",
+                    "path": "/api/v2/users/{{$.user_id}}.json",
+                    "connectionName": "zendesk"
+                }
+            }
+        },
+        "action.PostFetchedUser": {
+            "type": "ZIS::Action::Http",
+            "properties": {
+                "name": "post_fetched_user",
+                "definition": {
+                    "method": "POST",
+                    "url": "{{https_endpoint_id_portal}}",
+                    "requestBody": {
+                        "account_id": {{zendesk_account_id}},
+                        "details": "$.fetched_user",
+                        "type": "user.CustomRoleChanged"
                     }
                 }
             }
