@@ -70,7 +70,7 @@
               "ActionName": "zis:common:transform:Jq",
               "Comment": "Check if a Event type is available.",
               "Parameters": {
-                "expr": ".input.ticket_event.ticket.tags | any(. == \"tkt_pm_link_masterticket\" or . == \"tkt_pm_handover_l1\" or . == \"tkt_pm_handover_l2\" or . == \"tkt_pm_brandover_kununu\" or . == \"tkt_pm_brandover_xing\" or . == \"tkt_pm_handover_kbs\")",
+                "expr": ".input.ticket_event.ticket.tags | any(. == \"tkt_pm_link_masterticket\" or . == \"tkt_pm_handover_l1\" or . == \"tkt_pm_handover_l2\" or . == \"tkt_pm_brandover_kununu\" or . == \"tkt_pm_brandover_xing\" or . == \"tkt_pm_handover_kbs\" or . == \"tkt_pm_handover_tech_int\")",
                 "data.$": "$"
               },
               "ResultPath": "$.EventType",
