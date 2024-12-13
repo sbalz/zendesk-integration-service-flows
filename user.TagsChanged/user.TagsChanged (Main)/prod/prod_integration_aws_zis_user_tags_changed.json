@@ -1,0 +1,248 @@
+{
+    "zis_template_version": "2019-10-14",
+    "name": "AWS ZIS UserTagsChanged",
+    "description": "Listens to ZIS event 'user.TagsChanged' and starts an Amazon States Language workflow with conditional branches, data transformations, and API calls.",
+    "resources": {
+        "JobSpec": {
+            "type": "ZIS::JobSpec",
+            "properties": {
+                "name": "UserTagsChangedJobSpec",
+                "event_source": "support",
+                "event_type": "user.TagsChanged",
+                "flow_name": "zis:{{user_tags_changed}}:flow:UserTagsChangedFlow"
+            }
+        },
+        "Flow": {
+            "type": "ZIS::Flow",
+            "properties": {
+                "name": "UserTagsChangedFlow",
+                "definition": {
+                    "StartAt": "action.CheckAddedUserTag",
+                    "States": {
+                        "action.CheckAddedUserTag": {
+                            "Type": "Action",
+                            "ActionName": "zis:common:transform:Jq",
+                            "Comment": "Check if a specific User Tag was added.",
+                            "Parameters": {
+                                "expr": "(.input.user_event.tags_added[] | select(. == \"usr_k_csat_permanent_bl\" or . == \"usr_x_csat_permanent_bl\"))",
+                                "data.$": "$"
+                            },
+                            "ResultPath": "$.AddedTagResult",
+                            "Next": "pass.CSATFieldKeyAddedTag"
+                        },
+                        "pass.CSATFieldKeyAddedTag": {
+                            "Type": "Pass",
+                            "Result": {
+                                "csat_field_key.$": "$.AddedTagResult"
+                            },
+                            "Next": "choice.CheckAddedUserTagResult"
+                        },
+                        "choice.CheckAddedUserTagResult": {
+                            "Type": "Choice",
+                            "Comment": "Determine which tag was added.",
+                            "Choices": [
+                                {
+                                    "Variable": "$.AddedTagResult",
+                                    "StringEquals": "usr_k_csat_permanent_bl",
+                                    "Next": "wait.FiveSeconds1"
+                                },
+                                {
+                                    "Variable": "$.AddedTagResult",
+                                    "StringEquals": "usr_x_csat_permanent_bl",
+                                    "Next": "wait.FiveSeconds2"
+                                }
+                            ],
+                            "Default": "action.CheckRemovedUserTag"
+                        },
+                        "wait.FiveSeconds1": {
+                            "Type": "Wait",
+                            "Seconds": 5,
+                            "Comment": "Wait 5 seconds before updating the CSAT field.",
+                            "Next": "action.AddKununuPermanentCSAT"
+                        },
+                        "wait.FiveSeconds2": {
+                            "Type": "Wait",
+                            "Seconds": 5,
+                            "Comment": "Wait 5 seconds before updating the CSAT field.",
+                            "Next": "action.AddXingPermanentCSAT"
+                        },
+                        "action.AddKununuPermanentCSAT": {
+                            "Type": "Action",
+                            "ActionName": "zis:{{user_tags_changed}}:action:add_kununu_permanent_csat",
+                            "Comment": "Set the Permanent CSAT field to true.",
+                            "Parameters": {
+                                "user_email.$": "$.input.user_event.user.email"
+                            },
+                            "Next": "FlowEnd"
+                        },
+                        "action.AddXingPermanentCSAT": {
+                            "Type": "Action",
+                            "ActionName": "zis:{{user_tags_changed}}:action:add_xing_permanent_csat",
+                            "Comment": "Set the Permanent CSAT field to true.",
+                            "Parameters": {
+                                "user_email.$": "$.input.user_event.user.email"
+                            },
+                            "Next": "FlowEnd"
+                        },
+                        "action.CheckRemovedUserTag": {
+                            "Type": "Action",
+                            "ActionName": "zis:common:transform:Jq",
+                            "Comment": "Check if a specific User Tag was removed.",
+                            "Parameters": {
+                                "expr": "(.input.user_event.tags_removed[] | select(. == \"usr_k_csat_permanent_bl\" or . == \"usr_x_csat_permanent_bl\"))",
+                                "data.$": "$"
+                            },
+                            "ResultPath": "$.RemovedTagResult",
+                            "Next": "pass.CSATFieldKeyRemovedTag"
+                        },
+                        "pass.CSATFieldKeyRemovedTag": {
+                            "Type": "Pass",
+                            "Result": {
+                                "csat_field_key.$": "$.RemovedTagResult"
+                            },
+                            "Next": "choice.CheckRemovedUserTagResult"
+                        },
+                        "choice.CheckRemovedUserTagResult": {
+                            "Type": "Choice",
+                            "Comment": "Determine which tag was removed.",
+                            "Choices": [
+                                {
+                                    "Variable": "$.RemovedTagResult",
+                                    "StringEquals": "usr_k_csat_permanent_bl",
+                                    "Next": "wait.FiveSeconds3"
+                                },
+                                {
+                                    "Variable": "$.RemovedTagResult",
+                                    "StringEquals": "usr_x_csat_permanent_bl",
+                                    "Next": "wait.FiveSeconds4"
+                                }
+                            ],
+                            "Default": "NoExecutionTag"
+                        },
+                        "wait.FiveSeconds3": {
+                            "Type": "Wait",
+                            "Seconds": 5,
+                            "Comment": "Wait 5 seconds before clearing the CSAT field.",
+                            "Next": "action.RemoveKununuPermanentCSAT"
+                        },
+                        "wait.FiveSeconds4": {
+                            "Type": "Wait",
+                            "Seconds": 5,
+                            "Comment": "Wait 5 seconds before clearing the CSAT field.",
+                            "Next": "action.RemoveXingPermanentCSAT"
+                        },
+                        "action.RemoveKununuPermanentCSAT": {
+                            "Type": "Action",
+                            "ActionName": "zis:{{user_tags_changed}}:action:remove_kununu_permanent_csat",
+                            "Comment": "Set the Permanent CSAT field to false.",
+                            "Parameters": {
+                                "user_email.$": "$.input.user_event.user.email"
+                            },
+                            "Next": "FlowEnd"
+                        },
+                        "action.RemoveXingPermanentCSAT": {
+                            "Type": "Action",
+                            "ActionName": "zis:{{user_tags_changed}}:action:remove_xing_permanent_csat",
+                            "Comment": "Set the Permanent CSAT field to false.",
+                            "Parameters": {
+                                "user_email.$": "$.input.user_event.user.email"
+                            },
+                            "Next": "FlowEnd"
+                        },
+                        "NoExecutionTag": {
+                            "Type": "Succeed",
+                            "Comment": "Log",
+                            "Message": "✅ - User ID: {{$.input.user_event.user.id}}; No relevant tags added or removed. No action taken."
+                        },
+                        "FlowEnd": {
+                            "Type": "Succeed",
+                            "Comment": "Log",
+                            "Message": "✅ - User ID: {{$.input.user_event.user.id}}; Flow '{{$.csat_field_key}}' completed successfully."
+                        },
+                        "HandleError": {
+                            "Type": "Fail",
+                            "Error": "ActionExecutionFailed",
+                            "Cause": "❌ - User ID: {{$.input.user_event.user.id}}; Error in action '{{$.csat_field_key}}'. Error Details: {{$.ErrorDetails}}"
+                        }
+                    }
+                }
+            }
+        },
+        "action.AddXingPermanentCSAT": {
+            "type": "ZIS::Action::Http",
+            "properties": {
+                "name": "add_xing_permanent_csat",
+                "definition": {
+                    "method": "POST",
+                    "path": "/api/v2/users/create_or_update",
+                    "requestBody": {
+                        "user": {
+                            "email": "{{$.user_email}}",
+                            "user_fields": {
+                                "usr_x_csat_permanent_bl": true
+                            }
+                        }
+                    },
+                    "connectionName": "zendesk"
+                }
+            }
+        },
+        "action.RemoveXingPermanentCSAT": {
+            "type": "ZIS::Action::Http",
+            "properties": {
+                "name": "remove_xing_permanent_csat",
+                "definition": {
+                    "method": "POST",
+                    "path": "/api/v2/users/create_or_update",
+                    "requestBody": {
+                        "user": {
+                            "email": "{{$.user_email}}",
+                            "user_fields": {
+                                "usr_x_csat_permanent_bl": false
+                            }
+                        }
+                    },
+                    "connectionName": "zendesk"
+                }
+            }
+        },
+        "action.AddKununuPermanentCSAT": {
+            "type": "ZIS::Action::Http",
+            "properties": {
+                "name": "add_kununu_permanent_csat",
+                "definition": {
+                    "method": "POST",
+                    "path": "/api/v2/users/create_or_update",
+                    "requestBody": {
+                        "user": {
+                            "email": "{{$.user_email}}",
+                            "user_fields": {
+                                "usr_k_csat_permanent_bl": true
+                            }
+                        }
+                    },
+                    "connectionName": "zendesk"
+                }
+            }
+        },
+        "action.RemoveKununuPermanentCSAT": {
+            "type": "ZIS::Action::Http",
+            "properties": {
+                "name": "remove_kununu_permanent_csat",
+                "definition": {
+                    "method": "POST",
+                    "path": "/api/v2/users/create_or_update",
+                    "requestBody": {
+                        "user": {
+                            "email": "{{$.user_email}}",
+                            "user_fields": {
+                                "usr_k_csat_permanent_bl": false
+                            }
+                        }
+                    },
+                    "connectionName": "zendesk"
+                }
+            }
+        }
+    }
+}
