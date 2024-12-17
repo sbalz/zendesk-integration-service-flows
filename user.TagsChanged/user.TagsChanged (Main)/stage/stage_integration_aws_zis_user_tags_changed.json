@@ -17,9 +17,9 @@
             "properties": {
                 "name": "UserTagsChangedFlow",
                 "definition": {
-                    "StartAt": "pass.GlobalValues",
+                    "StartAt": "pass.GlobalVariable",
                     "States": {
-                        "pass.GlobalValues": {
+                        "pass.GlobalVariable": {
                             "Type": "Pass",
                             "Result": {
                                 "user_id.$": "$.input.user_event.user.id"
