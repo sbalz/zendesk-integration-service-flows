@@ -167,13 +167,14 @@
                             "Type": "Succeed",
                             "Comment": "Log",
                             "Message": "✅ - User ID: {{$.input.user_event.user.id}}; Flow '{{$.csat_field_key}}' completed successfully."
-                        },
-                        "HandleError": {
-                            "Type": "Fail",
-                            "Error": "ActionExecutionFailed",
-                            "Cause": "❌ - User ID: {{$.input.user_event.user.id}}; Error in action '{{$.csat_field_key}}'. Error Details: {{$.ErrorDetails}}"
                         }
-                    }
+                    },
+                    "Catch": [
+                        {
+                            "ErrorEquals": ["States.ALL"],
+                            "Next": "action.PostError"
+                        }
+                    ]
                 }
             }
         },
@@ -250,6 +251,26 @@
                         }
                     },
                     "connectionName": "zendesk"
+                }
+            }
+        },
+        "action.PostError": {
+            "type": "ZIS::Action::Http",
+            "properties": {
+                "name": "post_error",
+                "definition": {
+                    "method": "POST",
+                    "url": "{{https_endpoint_error_handling}}",
+                    "requestBody": {
+                        "error": {
+                            "platform": "Zendesk Integration Service",
+                            "instance": "SANDBOX",
+                            "flowName": "AWS ZIS UserTagsChanged",
+                            "flowStatus": "failed",
+                            "timeStamp.$": "$.input.user_event.meta.occurred_at | strptime(\"%Y-%m-%dT%H:%M:%S.%fZ\") | strftime(\"%d.%m.%Y - %H:%M:%S\")",
+                            "flowLink": ""
+                        }
+                    }
                 }
             }
         },
