@@ -17,8 +17,15 @@
             "properties": {
                 "name": "UserTagsChangedFlow",
                 "definition": {
-                    "StartAt": "action.CheckAddedUserTag",
+                    "StartAt": "pass.GlobalValues",
                     "States": {
+                        "pass.GlobalValues": {
+                            "Type": "Pass",
+                            "Result": {
+                                "user_id.$": "$.input.user_event.user.id"
+                            },
+                            "Next": "action.CheckAddedUserTag"
+                        },
                         "action.CheckAddedUserTag": {
                             "Type": "Action",
                             "ActionName": "zis:common:transform:Jq",
@@ -28,7 +35,14 @@
                                 "data.$": "$"
                             },
                             "ResultPath": "$.AddedTagResult",
-                            "Next": "pass.CSATFieldKeyAddedTag"
+                            "Next": "pass.CSATFieldKeyAddedTag",
+                            "Catch": [
+                                {
+                                    "ErrorEquals": ["States.ALL"],
+                                    "ResultPath": "$.errorDetails",
+                                    "Next": "action.PostError"
+                                }
+                            ]
                         },
                         "pass.CSATFieldKeyAddedTag": {
                             "Type": "Pass",
@@ -73,7 +87,14 @@
                             "Parameters": {
                                 "user_email.$": "$.input.user_event.user.email"
                             },
-                            "Next": "FlowEnd"
+                            "Next": "FlowEnd",
+                            "Catch": [
+                                {
+                                    "ErrorEquals": ["States.ALL"],
+                                    "ResultPath": "$.errorDetails",
+                                    "Next": "action.PostError"
+                                }
+                            ]
                         },
                         "action.AddXingPermanentCSAT": {
                             "Type": "Action",
@@ -82,7 +103,14 @@
                             "Parameters": {
                                 "user_email.$": "$.input.user_event.user.email"
                             },
-                            "Next": "FlowEnd"
+                            "Next": "FlowEnd",
+                            "Catch": [
+                                {
+                                    "ErrorEquals": ["States.ALL"],
+                                    "ResultPath": "$.errorDetails",
+                                    "Next": "action.PostError"
+                                }
+                            ]
                         },
                         "action.CheckRemovedUserTag": {
                             "Type": "Action",
@@ -93,7 +121,14 @@
                                 "data.$": "$"
                             },
                             "ResultPath": "$.RemovedTagResult",
-                            "Next": "pass.CSATFieldKeyRemovedTag"
+                            "Next": "pass.CSATFieldKeyRemovedTag",
+                            "Catch": [
+                                {
+                                    "ErrorEquals": ["States.ALL"],
+                                    "ResultPath": "$.errorDetails",
+                                    "Next": "action.PostError"
+                                }
+                            ]
                         },
                         "pass.CSATFieldKeyRemovedTag": {
                             "Type": "Pass",
@@ -138,7 +173,14 @@
                             "Parameters": {
                                 "user_email.$": "$.input.user_event.user.email"
                             },
-                            "Next": "FlowEnd"
+                            "Next": "FlowEnd",
+                            "Catch": [
+                                {
+                                    "ErrorEquals": ["States.ALL"],
+                                    "ResultPath": "$.errorDetails",
+                                    "Next": "action.PostError"
+                                }
+                            ]
                         },
                         "action.RemoveXingPermanentCSAT": {
                             "Type": "Action",
@@ -147,7 +189,14 @@
                             "Parameters": {
                                 "user_email.$": "$.input.user_event.user.email"
                             },
-                            "Next": "FlowEnd"
+                            "Next": "FlowEnd",
+                            "Catch": [
+                                {
+                                    "ErrorEquals": ["States.ALL"],
+                                    "ResultPath": "$.errorDetails",
+                                    "Next": "action.PostError"
+                                }
+                            ]
                         },
                         "action.PostWebhook": {
                             "Type": "Action",
@@ -156,32 +205,35 @@
                             "Parameters": {
                                 "payload.$": "$"
                             },
-                            "Next": "FlowEnd"
-                        },
-                        "NoExecutionTag": {
-                            "Type": "Succeed",
-                            "Comment": "Log",
-                            "Message": "✅ - User ID: {{$.input.user_event.user.id}}; No relevant tags added or removed. No action taken."
-                        },
-                        "FlowEnd": {
-                            "Type": "Succeed",
-                            "Comment": "Log",
-                            "Message": "✅ - User ID: {{$.input.user_event.user.id}}; Flow '{{$.csat_field_key}}' completed successfully."
-                        },
-                        "HandleError": {
-                            "Type": "Fail",
-                            "Error": "ActionExecutionFailed",
-                            "Cause": "❌ - User ID: {{$.input.user_event.user.id}}; Error in action '{{$.csat_field_key}}'. Error Details: {{$.ErrorDetails}}"
+                            "Next": "FlowEnd",
+                            "Catch": [
+                                {
+                                    "ErrorEquals": ["States.ALL"],
+                                    "ResultPath": "$.errorDetails",
+                                    "Next": "action.PostError"
+                                }
+                            ]
                         },
                         "action.PostError": {
                             "Type": "Action",
                             "ActionName": "zis:{{user_tags_changed}}:action:post_error",
                             "Comment": "Post Error to Monitor.",
-                            "Parameters": {
-                                "time_stamp.$": "$.input.user_event.meta.occurred_at | strptime(\"%Y-%m-%dT%H:%M:%S.%fZ\") | strftime(\"%d.%m.%Y - %H:%M:%S\")",
-                                "sequence_id.$": "$.input.user_event.meta.sequence.id"
-                            },
-                            "Next": "FlowEnd"
+                            "Next": "HandleError"
+                        },
+                        "NoExecutionTag": {
+                            "Type": "Succeed",
+                            "Comment": "Log",
+                            "Message": "✅ - User ID: {{$.user_id}}; No relevant tags added or removed. No action taken."
+                        },
+                        "FlowEnd": {
+                            "Type": "Succeed",
+                            "Comment": "Log",
+                            "Message": "✅ - User ID: {{$.user_id}}; Flow '{{$.csat_field_key}}' completed successfully."
+                        },
+                        "HandleError": {
+                            "Type": "Fail",
+                            "Error": "ActionExecutionFailed",
+                            "Cause": "❌ - User ID: {{$.user_id}}; Error in action!"
                         }
                     }
                 }
@@ -276,8 +328,8 @@
                             "instance": "SANDBOX",
                             "flowName": "AWS ZIS UserTagsChanged",
                             "flowStatus": "failed",
-                            "timeStamp.$": "{{$.time_stamp}}",
-                            "flowLink": "{{$.sequence_id}}"
+                            "timeStamp": "",
+                            "flowLink": ""
                         }
                     }
                 }
