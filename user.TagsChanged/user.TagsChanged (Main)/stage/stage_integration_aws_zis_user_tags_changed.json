@@ -167,14 +167,23 @@
                             "Type": "Succeed",
                             "Comment": "Log",
                             "Message": "✅ - User ID: {{$.input.user_event.user.id}}; Flow '{{$.csat_field_key}}' completed successfully."
+                        },
+                        "HandleError": {
+                            "Type": "Fail",
+                            "Error": "ActionExecutionFailed",
+                            "Cause": "❌ - User ID: {{$.input.user_event.user.id}}; Error in action '{{$.csat_field_key}}'. Error Details: {{$.ErrorDetails}}"
+                        },
+                        "action.PostError": {
+                            "Type": "Action",
+                            "ActionName": "zis:{{user_tags_changed}}:action:post_error",
+                            "Comment": "Post Error to Monitor.",
+                            "Parameters": {
+                                "time_stamp.$": "$.input.user_event.meta.occurred_at | strptime(\"%Y-%m-%dT%H:%M:%S.%fZ\") | strftime(\"%d.%m.%Y - %H:%M:%S\")",
+                                "sequence_id.$": "$.input.user_event.meta.sequence.id"
+                            },
+                            "Next": "FlowEnd"
                         }
-                    },
-                    "Catch": [
-                        {
-                            "ErrorEquals": ["States.ALL"],
-                            "Next": "action.PostError"
-                        }
-                    ]
+                    }
                 }
             }
         },
@@ -267,8 +276,8 @@
                             "instance": "SANDBOX",
                             "flowName": "AWS ZIS UserTagsChanged",
                             "flowStatus": "failed",
-                            "timeStamp.$": "$.input.user_event.meta.occurred_at | strptime(\"%Y-%m-%dT%H:%M:%S.%fZ\") | strftime(\"%d.%m.%Y - %H:%M:%S\")",
-                            "flowLink": ""
+                            "timeStamp.$": "{{$.time_stamp}}",
+                            "flowLink": "{{$.sequence_id}}"
                         }
                     }
                 }
